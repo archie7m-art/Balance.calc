@@ -1,0 +1,14 @@
+Account Category,Account Name,Q1 Balance (USD),Q2 Balance (USD),Status
+Assets,Total Assets,500000,480000,Active
+Current Assets,Cash and Cash Equivalents,150000,140000,Active
+Current Assets,Accounts Receivable,80000,,Pending
+Current Assets,Inventory,120000,110000,Active
+Non-Current Assets,"Property, Plant & Equipment",200000,190000,Active
+Non-Current Assets,Intangible Assets,-50000,40000,Suspicious
+Liabilities,Total Liabilities,300000,290000,Active
+Current Liabilities,Accounts Payable,70000,65000,Active
+Current Liabilities,Short-term Debt,80000,75000,Active
+Non-Current Liabilities,Long-term Debt,150000,150000,Active
+Equity,Common Stock,100000,100000,Active
+Equity,Retained Earnings,120000,N/A,Error
+Check Totals,Imbalance Check,50000,0,Mismatch
