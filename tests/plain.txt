@@ -1,0 +1,4 @@
+Rice    120
+Oil     450
+Sugar    85
+Total   655
