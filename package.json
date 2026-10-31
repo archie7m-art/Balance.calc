@@ -1,0 +1,8 @@
+{
+  "name": "balance-calc",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Balance sheet calculator: import a table, edit it, run checks.",
+  "scripts": { "test": "node --test tests/*.test.mjs" }
+}

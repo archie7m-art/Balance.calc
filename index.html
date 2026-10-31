@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Balance Sheet Calculator</title>
+<meta name="description" content="Open a balance sheet from CSV, Excel, Word or PDF, fix any number by hand, and check it with calculator-style buttons. Everything stays on your device.">
+<meta name="theme-color" content="#14213d">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <h1>Balance Sheet Calculator</h1>
+  <p class="sub">Open a file, fix any number by hand, press a button. <strong>Nothing leaves your phone or computer.</strong></p>
+</header>
+
+<main>
+  <section class="card" id="importCard" aria-labelledby="h-import">
+    <h2 id="h-import">1. Get your data in</h2>
+    <div class="row">
+      <label class="btn primary" for="fileInput">Open a file</label>
+      <input id="fileInput" type="file" accept=".csv,.tsv,.txt,.xlsx,.xlsm,.docx,.pdf" hidden>
+      <button class="btn" id="pasteToggle" type="button">Paste text</button>
+      <button class="btn" id="demoBtn" type="button">Try an example</button>
+    </div>
+    <p class="hint">Works with CSV, Excel (.xlsx), Word (.docx), PDF that has real text, or text you paste. You can also drop a file here.</p>
+    <div id="pasteBox" hidden>
+      <textarea id="pasteText" rows="6" placeholder="Paste a table here: copy from Excel, a web page, or a message" aria-label="Pasted table"></textarea>
+      <button class="btn primary" id="pasteGo" type="button">Use this table</button>
+    </div>
+    <div id="tablePick" hidden>
+      <label for="tableSelect">This file has several tables. Use:</label>
+      <select id="tableSelect"></select>
+    </div>
+    <p id="importMsg" class="msg" role="status" aria-live="polite"></p>
+  </section>
+
+  <section class="card" id="tableCard" aria-labelledby="h-table" hidden>
+    <h2 id="h-table">2. Your table <span class="small">(tap any cell to change it)</span></h2>
+    <div class="row tools">
+      <button class="btn sm" id="undoBtn" type="button">Undo</button>
+      <button class="btn sm" id="redoBtn" type="button">Redo</button>
+      <button class="btn sm" id="addRowBtn" type="button">+ Row</button>
+      <button class="btn sm" id="addColBtn" type="button">+ Column</button>
+      <button class="btn sm" id="csvBtn" type="button">Save as CSV</button>
+      <button class="btn sm danger" id="clearBtn" type="button">Clear</button>
+    </div>
+    <div class="scroll" id="tableWrap" tabindex="-1"></div>
+    <p class="hint">Each column is marked <b>Names</b> (text), <b>Numbers</b> (amounts) or <b>Other</b>. Each row has a <b>Type</b> (asset, liability, equity, total…). I guess both from the words; change them if I guessed wrong.</p>
+  </section>
+
+  <section class="card" id="keyCard" aria-labelledby="h-keys" hidden>
+    <h2 id="h-keys">3. Press a button</h2>
+    <div class="keypad" role="group" aria-label="Tools">
+      <button class="key" data-tool="check" type="button"><b>Check</b><span>my balance sheet</span></button>
+      <button class="key" data-tool="why" type="button"><b>Why?</b><span>it doesn't match</span></button>
+      <button class="key" data-tool="missing" type="button"><b>Find</b><span>the missing figure</span></button>
+      <button class="key" data-tool="compare" type="button"><b>Compare</b><span>two periods</span></button>
+      <button class="key" data-tool="ratios" type="button"><b>Ratios</b><span>how healthy is it</span></button>
+    </div>
+    <div class="display" id="display" aria-live="polite">
+      <div class="screen" id="screenTitle">Pick a tool above</div>
+      <div id="results"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <p>The rules (what counts as an asset, a total, a balance) are built in by the author and guessed from the words in your table. Always look at the table before you trust an answer. When a tool says "this would make it balance", that is arithmetic, not proof that the number was the real mistake.</p>
+  <p><span id="net"></span></p>
+</footer>
+
+<script src="vendor/jszip.min.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
