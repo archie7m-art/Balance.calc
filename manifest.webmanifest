@@ -1,7 +1,7 @@
 {
-  "name": "Balance Sheet Calculator",
-  "short_name": "Balance Calc",
-  "description": "Open a balance sheet from CSV, Excel, Word or PDF, edit it by hand and check it. Works offline; nothing is uploaded.",
+  "name": "Business Calculator",
+  "short_name": "Biz Calc",
+  "description": "Balance sheet checks, margin, GST, break-even, stock and sales analysis. Open CSV, Excel, Word or PDF and edit by hand. Works offline; nothing is uploaded.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -1,24 +1,24 @@
-# Balance Sheet Calculator
+# Business Calculator
 
-A small website you can install on your phone like an app (a PWA). Open a balance sheet from CSV, Excel (.xlsx), Word (.docx), a PDF with real text, or pasted text. Fix any cell by hand, delete rows or columns, then press a button:
+A small website you can install on your phone like an app (a PWA). 53 tools in four sections: Balance sheet, Profit and GST, Table analysis, Sales and stock. Amounts are in rupees (₹). Open a balance sheet from CSV, Excel (.xlsx), Word (.docx), a PDF with real text, or pasted text. Fix any cell by hand, delete rows or columns, then press a button:
 
 - **Check**: do the totals match their lines, and does Assets = Liabilities + Equity?
 - **Why?**: which single mistake (swapped digits, slipped decimal, counted twice, wrong sign...) explains a gap.
 - **Find**: work out a blank figure from the others.
 - **Compare**: two periods side by side, with the changes.
-- **Ratios**: working capital, current ratio, debt-to-equity.
+- **29 buttons in all**: Check, Why?, Find, Compare, All ratios, Common-size, plus 23 single measures (working capital, current, quick and cash ratios, debt-to-equity, debt ratio, net debt, ROE, ROA, margins, stock and collection days, interest cover...). Profit-based ones ask you to type sales or profit, because a balance sheet does not contain them.
 
 Everything runs in the browser. No file is uploaded anywhere.
 
 ## Put it online in 5 steps (GitHub + Vercel, no coding)
 
 1. On github.com press **New repository**, give it a name, press **Create**.
-2. Press **uploading an existing file**, drag in everything inside this folder (keep the folders `icons`, `vendor`, `tests` as they are), press **Commit changes**.
+2. Press **uploading an existing file**, drag in everything inside this folder (keep the folders `vendor` and `tests` as they are), press **Commit changes**.
 3. On vercel.com sign in with GitHub, press **Add New → Project**, pick your repository.
 4. Leave every setting empty (Framework: **Other**, no build command, no output folder), press **Deploy**.
 5. Open the link Vercel gives you. On a phone choose **Add to Home Screen** (or **Install app**).
 
-After you change any file, open `sw.js` and change `bsc-v1` to `bsc-v2` (and so on) so phones fetch the new version.
+After you change any file, open `sw.js` and change the number after `bsc-v` to the next one (and so on) so phones fetch the new version.
 
 ## Limits (honest)
 

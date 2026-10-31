@@ -1,6 +1,8 @@
 // app.js -- the screen. All work happens in this browser; nothing is uploaded.
 import { fromRows, toCSV, ops } from "./tableio.js";
 import { importFile, parsePasted } from "./importers.js";
+import { BIZ } from "./biz.js";
+import { METRICS, runMetric, figures, EXTRA_NAMES } from "./metrics.js";
 import { parseAmount, fmt, detectColumns, ROLES, ROLE_NAMES, guessRoles, buildIdentities, checkSheet, missingFigures, comparePeriods, ratios, whyMismatch } from "./engine.js";
 
 const $ = id => document.getElementById(id);
@@ -10,6 +12,9 @@ const KINDS = { names: "Names", numbers: "Numbers", other: "Other" };
 // ------------------------------------------------------------------ state
 // table = {header, rows}; over[i] = a role the person chose for row i (or null = my guess); kind[j] = chosen kind of column j (or null = my guess)
 let S = { table: null, over: [], kind: [] };
+let EX = {};
+try { EX = JSON.parse(localStorage.getItem("bsc.extras") || "{}"); } catch (e) { EX = {}; }
+const saveEX = () => { try { localStorage.setItem("bsc.extras", JSON.stringify(EX)); } catch (e) { /* fine */ } };
 let undoStack = [], redoStack = [], pendingTables = [], lastTool = null, highlight = new Set();
 
 const snap = () => JSON.stringify(S);
@@ -17,7 +22,7 @@ const restore = s => { S = JSON.parse(s); };
 function commit(next) { undoStack.push(snap()); if (undoStack.length > 100) undoStack.shift(); redoStack = []; S = next; save(); }
 function load(table, note) {
   S = { table, over: table.rows.map(() => null), kind: table.header.map(() => null) };
-  undoStack = []; redoStack = []; highlight = new Set(); lastTool = null; save(); renderAll(); showResults(null);
+  undoStack = []; redoStack = []; highlight = new Set(); lastTool = null; for (const k in PICK) delete PICK[k]; save(); renderAll(); showResults(null);
   if (note) say(note, "ok");
 }
 function save() { try { localStorage.setItem("bsc.table", JSON.stringify(S)); } catch (e) { /* private window: fine */ } }
@@ -63,6 +68,24 @@ $("pasteGo").addEventListener("click", () => {
   if (rows.length < 1) return say("There is nothing to read yet. Paste a table first.", "err");
   pendingTables = [{ name: "Pasted", rows }]; $("tablePick").hidden = true; useTable(0, "", "text");
 });
+$("demoSales").addEventListener("click", () => {
+  const demo = `Date,Item,Category,Qty sold,Unit cost,Unit price,Amount,In stock,Reorder level
+05/01/2026,Notebook,Stationery,20,30,45,900,120,50
+12/01/2026,Pen box,Stationery,10,60,90,900,15,20
+18/01/2026,Desk lamp,Electronics,3,400,650,1950,8,5
+02/02/2026,Notebook,Stationery,25,30,45,1125,95,50
+09/02/2026,Calculator,Electronics,4,250,240,960,0,6
+09/02/2026,Calculator,Electronics,4,250,240,960,0,6
+14/02/2026,Desk lamp,Electronics,5,400,650,3250,3,5
+01/03/2026,Pen box,Stationery,30,60,90,2700,15,20
+11/03/2026,Backpack,Travel,6,500,850,5100,22,10
+not sold yet,Stapler,Stationery,0,40,65,0,40,10
+27/03/2026,Backpack,Travel,9,500,850,7650,13,10
+30/03/2026,Notebook,Stationery,40,30,45,1800,55,50`;
+  pendingTables = [{ name: "Example", rows: parsePasted(demo) }]; $("tablePick").hidden = true;
+  useTable(0, "sales example", "text"); section = "stock"; buildKeypad();
+  say("Sales example opened. It has a duplicated row, a product sold below cost, a bad date and low stock on purpose. Try the Sales and stock buttons.", "ok");
+});
 $("demoBtn").addEventListener("click", () => {
   const demo = `Section,Item,2024,2025
 Assets,Total Assets,"90,000","95,000"
@@ -77,12 +100,13 @@ Equity,Owner capital,"25,000","25,000"
 Equity,Retained earnings,"15,000","18,000"`;
   pendingTables = [{ name: "Example", rows: parsePasted(demo) }]; $("tablePick").hidden = true;
   useTable(0, "example", "text");
+  section = "bs"; buildKeypad();
   say("Example opened. The 2025 Equity lines were typed wrongly on purpose: press Check, then Why?", "ok");
 });
 for (const ev of ["dragover", "drop"]) $("importCard").addEventListener(ev, e => { e.preventDefault(); if (ev === "drop" && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
 
 // ------------------------------------------------------------------ the table
-function renderAll() { const has = !!S.table; $("tableCard").hidden = !has; $("keyCard").hidden = !has; if (has) { renderTable(); updateButtons(); } }
+function renderAll() { const has = !!S.table; $("tableCard").hidden = !has; $("keyCard").hidden = false; if (has) { renderTable(); updateButtons(); } }
 
 function renderTable() {
   const { t, kindOf, amountCols, roles } = view();
@@ -94,7 +118,7 @@ function renderTable() {
   });
   h += `<th>Type of row</th></tr></thead><tbody>`;
   t.rows.forEach((r, i) => {
-    h += `<tr><td class="rn"><div>${i + 1}</div><button class="x" data-dr="${i}" aria-label="Delete row ${i + 1}" title="Delete this row">✕</button></td>`;
+    h += `<tr class="${/^total/.test(roles[i].role) ? "r-total" : roles[i].role === "check" ? "r-check" : ""}"><td class="rn"><div>${i + 1}</div><button class="x" data-dr="${i}" aria-label="Delete row ${i + 1}" title="Delete this row">✕</button></td>`;
     r.forEach((c, j) => { h += `<td class="${amountCols.includes(j) ? "num" : ""}${highlight.has(i + ":" + j) ? " hl" : ""}" data-cell="${i}:${j}"><input data-i="${i}" data-j="${j}" value="${esc(c)}" aria-label="Row ${i + 1}, ${esc(t.header[j])}" ${amountCols.includes(j) ? 'inputmode="decimal"' : ""}></td>`; });
     h += `<td class="rolecell ${roles[i].guessed ? "guess" : ""}"><select data-r="${i}" aria-label="Type of row ${i + 1}">${ROLES.map(k => `<option value="${k}" ${roles[i].role === k ? "selected" : ""}>${ROLE_NAMES[k]}${roles[i].guessed && roles[i].role === k ? " (guess)" : ""}</option>`).join("")}</select></td></tr>`;
   });
@@ -122,7 +146,7 @@ $("tableWrap").addEventListener("click", e => {
     if (t.header.length <= 1) return say("A table needs at least one column.", "err");
     const j = +b.dataset.dc, k = [...S.kind]; k.splice(j, 1); commit({ ...S, table: ops.deleteColumn(t, j), kind: k });
   }
-  highlight = new Set(); renderTable(); updateButtons(); rerunTool();
+  for (const k in PICK) delete PICK[k]; highlight = new Set(); renderTable(); updateButtons(); rerunTool();
 });
 $("addRowBtn").addEventListener("click", () => { commit({ ...S, table: ops.addRow(S.table), over: [...S.over, null] }); renderTable(); updateButtons(); const w = $("tableWrap"); w.scrollTop = w.scrollHeight; });
 $("addColBtn").addEventListener("click", () => { commit({ ...S, table: ops.addColumn(S.table), kind: [...S.kind, null] }); renderTable(); updateButtons(); });
@@ -150,8 +174,25 @@ function showResults(tool) {
   document.querySelectorAll(".key").forEach(k => k.classList.toggle("on", k.dataset.tool === tool));
   if (!tool) { screen("Pick a tool above"); $("results").innerHTML = ""; }
 }
-function rerunTool() { if (lastTool && S.table) runTool(lastTool, true); }
-document.querySelector(".keypad").addEventListener("click", e => { const k = e.target.closest(".key"); if (k) runTool(k.dataset.tool); });
+function rerunTool() { const b = BIZ.find(x => x.id === lastTool); if (lastTool && S.table && !(b && b.kind === "quick")) runTool(lastTool, true); }
+const BASIC = [["check", "Check", "my balance sheet"], ["why", "Why?", "it doesn't match"], ["missing", "Find", "the missing figure"], ["compare", "Compare", "two periods"], ["ratios", "All ratios", "main ones in one go"], ["common", "Common-size", "each line as % of assets"]];
+const SECTIONS = [["bs", "Balance sheet"], ["profit", "Profit and GST"], ["analysis", "Table analysis"], ["stock", "Sales and stock"]];
+const COLORS = ["var(--g-check)", "var(--g-safe)", "var(--g-debt)", "var(--g-profit)"];
+let section = "bs"; try { section = localStorage.getItem("bsc.section") || "bs"; } catch (e) { /* fine */ }
+function groupsFor(sec) {
+  if (sec === "bs") return [["Checks and fixes", COLORS[0], BASIC], ...["Short-term safety", "Debt and ownership", "Needs profit or sales"].map((g, i) => [g === "Needs profit or sales" ? "Needs profit or sales (you type them in)" : g, COLORS[i + 1], METRICS.filter(m => m.group === g).map(m => [m.id, m.name, m.sub])])];
+  const names = [...new Set(BIZ.filter(b => b.section === sec).map(b => b.group))];
+  return names.map((g, i) => [g, COLORS[i % 4], BIZ.filter(b => b.section === sec && b.group === g).map(b => [b.id, b.name, b.sub])]);
+}
+function buildKeypad() {
+  $("keypad").innerHTML = `<div class="tabs" role="tablist">${SECTIONS.map(([id, nm]) => `<button class="tab${id === section ? " on" : ""}" role="tab" aria-selected="${id === section}" data-sec="${id}" type="button">${esc(nm)}</button>`).join("")}</div>` +
+    groupsFor(section).map(([title, color, keys]) => `<div class="kgroup" style="--gc:${color}"><h3>${esc(title)}</h3><div class="keypad">${keys.map(([id, name, sub]) => `<button class="key${id === lastTool ? " on" : ""}" data-tool="${id}" type="button"><b>${esc(name)}</b><span>${esc(sub)}</span></button>`).join("")}</div></div>`).join("");
+}
+$("keypad").addEventListener("click", e => {
+  const tb = e.target.closest(".tab"); if (tb) { section = tb.dataset.sec; try { localStorage.setItem("bsc.section", section); } catch (x) { /* fine */ } buildKeypad(); return; }
+  const k = e.target.closest(".key"); if (k) runTool(k.dataset.tool);
+});
+buildKeypad();
 
 function card(cls, title, body = "", actions = "") { return `<div class="res ${cls}"><h3>${title}</h3>${body}${actions ? `<div class="actions">${actions}</div>` : ""}</div>`; }
 const showBtn = cells => `<button class="btn sm" data-show='${JSON.stringify(cells)}'>Show in table</button>`;
@@ -159,6 +200,9 @@ const fixBtn = f => `<button class="btn sm primary" data-fix='${JSON.stringify(f
 
 function runTool(tool, quiet) {
   showResults(tool); if (!quiet) highlight = new Set();
+  const biz = BIZ.find(b => b.id === tool);
+  if (biz) { try { biz.kind === "quick" ? runQuick(biz) : runBizTable(biz); } catch (e) { $("results").innerHTML = card("error", "Something went wrong", `<p>${esc(e.message)}</p>`); } return; }
+  if (!S.table) { screen("Open a table first"); $("results").innerHTML = card("info", "This tool needs a table", "<p>Open a file, paste text, or press <b>Try an example</b> above.</p>"); return; }
   const V = view(), out = $("results");
   if (!V.amountCols.length && tool !== "why") { screen("No number columns"); out.innerHTML = card("info", "I could not find a column of numbers", "<p>Under a column's name, choose <b>Numbers</b> for each column that holds amounts.</p>"); return; }
   try {
@@ -167,6 +211,8 @@ function runTool(tool, quiet) {
     else if (tool === "missing") toolMissing(V, out);
     else if (tool === "compare") toolCompare(V, out);
     else if (tool === "ratios") toolRatios(V, out);
+    else if (tool === "common") toolCommon(V, out);
+    else if (METRICS.some(m => m.id === tool)) toolMetric(V, out, METRICS.find(m => m.id === tool));
   } catch (e) { out.innerHTML = card("error", "Something went wrong", `<p>${esc(e.message)}</p>`); }
 }
 
@@ -268,8 +314,114 @@ function toolRatios(V, out) {
     (p.needs ? `<p>${esc(p.needs)}</p>` : "") + (p.note ? `<p><b>${esc(p.note)}</b></p>` : ""))).join("");
 }
 
+function toolMetric(V, out, m) {
+  screen(m.name);
+  let h = "";
+  if (m.ex && m.ex.length) {
+    h += `<div class="res info extras"><h3>Type in these figures from your profit and loss statement</h3><p>A balance sheet does not contain them. Use the same period as the balance sheet column.</p>` +
+      V.amountCols.map(c => `<div><b>${esc(colName(c))}</b><div class="grid2">${m.ex.map(k => `<label>${esc(EXTRA_NAMES[k])}<input type="text" inputmode="decimal" data-ex="${k}" data-excol="${esc(colName(c))}" value="${esc((EX[k] || {})[colName(c)] || "")}"></label>`).join("")}</div></div>`).join("") + `</div>`;
+  }
+  for (const c of V.amountCols) {
+    const ex = {}; for (const k of m.ex || []) ex[k] = (EX[k] || {})[colName(c)];
+    const r = runMetric(m, V.t, V.roles, c, V.labelCol, ex);
+    if (r.missing) { h += card(r.needsInput ? "info" : "warn", esc(colName(c)), `<p>${esc(r.missing)}</p>`); continue; }
+    h += card("good", esc(colName(c)), `<div class="big">${esc(r.value)}</div><p><span class="formula">${esc(r.formula)}</span></p>` +
+      `<ul>${r.parts.map(([n, v]) => `<li>${esc(n)}: <b>${esc(v)}</b></li>`).join("")}</ul><p>${esc(r.meaning)}</p>` + r.notes.map(n => `<p><b>${esc(n)}</b></p>`).join("") +
+      `<p class="small">Rule of thumb only: what is normal depends on the kind of business.</p>`);
+  }
+  out.innerHTML = h;
+}
+
+function toolCommon(V, out) {
+  screen("Common-size: each line as % of total assets");
+  const figs = V.amountCols.map(c => figures(V.t, V.roles, c, V.labelCol));
+  if (figs.some(f => !f.TA || f.TA.v === 0)) { out.innerHTML = card("warn", "I need total assets", "<p>Mark a row as <b>Total assets</b>, or mark the asset lines as <b>Asset line</b>.</p>"); return; }
+  const rows = V.t.rows.map((_, i) => i).filter(i => !["other", "check"].includes(V.roles[i].role));
+  out.innerHTML = `<div class="res info mini-wrap"><table class="mini"><thead><tr><th>Line</th>${V.amountCols.map(c => `<th>${esc(colName(c))}</th><th>% of assets</th>`).join("")}</tr></thead><tbody>` +
+    rows.map(i => `<tr><td>${esc(V.t.rows[i][V.labelCol] || "row " + (i + 1))}</td>${V.amountCols.map((c, k) => { const p = parseAmount(V.t.rows[i][c]); return p.kind === "num" ? `<td>${esc(fmt(p.cents))}</td><td>${(p.cents / figs[k].TA.v * 100).toFixed(1)}%</td>` : "<td>–</td><td>–</td>"; }).join("")}</tr>`).join("") + `</tbody></table></div>` +
+    card("info", "How to read this", "<p>Every line is divided by total assets, so you can compare years of different size. Liabilities and equity should add up to 100% if the sheet balances.</p>");
+}
+
+$("results").addEventListener("change", e => {
+  const el = e.target; if (!el.dataset || el.dataset.ex === undefined) return;
+  (EX[el.dataset.ex] ||= {})[el.dataset.excol] = el.value; saveEX(); runTool(lastTool, true);
+});
+
+// ------------------------------------------------------------------ business tools
+const QV = {}, PICK = {}, PAR = {};
+const krow = (k, v, s) => `<div class="krow${s ? " s" : ""}"><span>${esc(k)}</span><b>${esc(v)}</b></div>`;
+function renderBlocks(blocks) {
+  return blocks.map(b => {
+    if (b.type === "note") return `<div class="res ${b.cls || "info"}"><p>${esc(b.text)}</p></div>`;
+    if (b.type === "kv") return card(b.cls || "info", esc(b.title || ""), b.rows.map(([k, v, s]) => krow(k, v, s)).join(""));
+    const rc = b.rowCells;
+    return `<div class="res info mini-wrap"><h3>${esc(b.title || "")}</h3><table class="mini"><thead><tr>${b.head.map(h => `<th>${esc(h)}</th>`).join("")}${rc ? "<th></th>" : ""}</tr></thead><tbody>` +
+      b.rows.map((r, i) => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}${rc ? `<td><button class="btn sm" data-show='${JSON.stringify(rc[i].slice(0, 200))}'>Show</button></td>` : ""}</tr>`).join("") + `</tbody></table></div>`;
+  }).join("");
+}
+
+function runQuick(b) {
+  screen(b.name);
+  const vals = QV[b.id] ||= {};
+  $("results").innerHTML = `<div class="res info extras"><h3>${esc(b.name)}</h3><div class="grid2">${b.fields.map(f => `<div><label>${esc(f.label)}${f.optional ? " (optional)" : ""}<input type="text" inputmode="decimal" data-qf="${f.id}" value="${esc(vals[f.id] || "")}" placeholder="${f.kind === "money" ? "₹" : f.kind === "percent" ? "%" : ""}" autocomplete="off"></label>` +
+    (f.chips ? `<div class="chips">${f.chips.map(c => `<button type="button" class="chip" data-qchip="${f.id}" data-v="${c}">${c}%</button>`).join("")}</div>` : "") + `</div>`).join("")}</div></div><div id="qout"></div>`;
+  quickCalc(b);
+}
+function quickCalc(b) {
+  const vals = QV[b.id] || {}, v = {}, bad = [], empty = [];
+  for (const f of b.fields) {
+    const s = String(vals[f.id] ?? "").replace(/%\s*$/, ""), p = parseAmount(s);
+    if (p.kind === "blank") { if (f.optional) v[f.id] = null; else empty.push(f.label); }
+    else if (p.kind === "num") v[f.id] = p.cents / 100; else bad.push(f.label);
+  }
+  const out = $("qout");
+  if (bad.length) { out.innerHTML = card("warn", "I cannot read a number in", `<p>${bad.map(esc).join(", ")}. Use plain numbers like 1200 or 45.50.</p>`); return; }
+  if (empty.length) { out.innerHTML = card("info", "Fill in the boxes above", `<p>Still needed: ${empty.map(esc).join(", ")}.</p>`); return; }
+  const r = b.calc(v);
+  if (r.missing) { out.innerHTML = card("warn", "Cannot work this out", `<p>${esc(r.missing)}</p>`); return; }
+  out.innerHTML = card("good", "Answer", r.rows.map(([k, x, s]) => krow(k, x, s)).join("") + r.notes.map(n => `<p class="small">${esc(n)}</p>`).join(""));
+}
+
+const GUESS = { item: /item|product|name|particular|description|sku|material|account/i, group: /categor|group|type|region|branch|customer|party|department|section|segment/i, amount: /amount|total|sales|revenue|value|net/i,
+  sales: /sales|revenue|price|selling|amount|mrp|rate/i, cost: /cost|purchase|buy/i, qty: /qty|quantity|units|pcs|on hand|stock/i, reorder: /reorder|re-order|minimum|\bmin\b|safety/i, date: /date|month|day|period/i };
+function pickCol(p, V, taken) {
+  const n = V.t.header.length, st = PICK[p.id];
+  if (Number.isInteger(st) && st < n) return st;
+  const all = V.t.header.map((_, j) => j), nums = V.amountCols, texts = all.filter(j => !nums.includes(j));
+  const pool = p.kind === "num" ? (nums.length ? nums : all) : (texts.length ? texts : all), re = GUESS[p.id];
+  const free = pool.filter(j => !taken.has(j));
+  return (re && pool.find(j => re.test(V.t.header[j]) && !taken.has(j))) ?? (p.id === "item" && free.includes(V.labelCol) ? V.labelCol : (free[0] ?? pool[0]));
+}
+function runBizTable(b) {
+  screen(b.name);
+  if (!S.table) { $("results").innerHTML = card("info", "This tool needs a table", "<p>Open a file, paste text, or press <b>Try an example</b> above. The quick calculators in the <b>Profit and GST</b> section need no file.</p>"); return; }
+  const V = view(), pk = {}, taken = new Set(), pm = {};
+  for (const p of b.picks) { pk[p.id] = pickCol(p, V, taken); taken.add(pk[p.id]); }
+  for (const q of b.params || []) pm[q.id] = PAR[b.id + ":" + q.id] ?? q.def;
+  let h = "";
+  if (b.picks.length || (b.params || []).length) {
+    h += `<div class="res info extras"><h3>Which columns?</h3>${b.picks.length ? '<p class="small">I guessed these from the column names. Change any that are wrong.</p>' : ""}<div class="grid2">` +
+      b.picks.map(p => `<label>${esc(p.label)}<select data-pick="${p.id}">${V.t.header.map((hd, j) => `<option value="${j}" ${pk[p.id] === j ? "selected" : ""}>${j + 1}. ${esc(hd)}</option>`).join("")}</select></label>`).join("") +
+      (b.params || []).map(q => `<label>${esc(q.label)}<select data-par="${b.id}:${q.id}">${q.options.map(([val, lb]) => `<option value="${esc(val)}" ${String(pm[q.id]) === String(val) ? "selected" : ""}>${esc(lb)}</option>`).join("")}</select></label>`).join("") + `</div></div>`;
+  }
+  h += renderBlocks(b.calc({ t: S.table, pk, pm, amountCols: V.amountCols }));
+  $("results").innerHTML = h;
+}
+$("results").addEventListener("input", e => {
+  const el = e.target; if (el.dataset.qf === undefined) return;
+  const b = BIZ.find(x => x.id === lastTool); if (!b || b.kind !== "quick") return;
+  (QV[b.id] ||= {})[el.dataset.qf] = el.value; quickCalc(b);
+});
+$("results").addEventListener("change", e => {
+  const el = e.target;
+  if (el.dataset.pick !== undefined) { PICK[el.dataset.pick] = +el.value; runTool(lastTool, true); }
+  else if (el.dataset.par !== undefined) { PAR[el.dataset.par] = el.value; runTool(lastTool, true); }
+});
+
 // buttons inside results
 $("results").addEventListener("click", e => {
+  const ch = e.target.closest("[data-qchip]");
+  if (ch) { const b = BIZ.find(x => x.id === lastTool); (QV[b.id] ||= {})[ch.dataset.qchip] = ch.dataset.v; const inp = document.querySelector(`input[data-qf="${ch.dataset.qchip}"]`); if (inp) inp.value = ch.dataset.v; quickCalc(b); return; }
   const s = e.target.closest("[data-show]"), f = e.target.closest("[data-fix]");
   if (s) { highlight = new Set(JSON.parse(s.dataset.show).map(([r, c]) => r + ":" + c)); renderTable(); const first = document.querySelector("td.hl"); if (first) first.scrollIntoView({ block: "center", inline: "center" }); }
   if (f) { const z = JSON.parse(f.dataset.fix); commit({ ...S, table: ops.setCell(S.table, z.row, z.col, plainNum(z.to)) }); highlight = new Set([z.row + ":" + z.col]); renderTable(); updateButtons(); runTool(lastTool, true); }
