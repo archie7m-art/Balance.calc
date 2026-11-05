@@ -14,7 +14,7 @@
 <body>
 <header class="top">
   <h1>Business Calculator</h1>
-  <p class="sub">Balance sheet, profit and GST, sales and stock. Open a file or just type numbers, press a button. <strong>Nothing leaves your phone or computer.</strong></p>
+  <p class="sub">GST filing, profit, sales and stock, balance sheet. Open a file or just type numbers, press a button. <strong>Nothing leaves your phone or computer.</strong></p>
 </header>
 
 <main>
@@ -24,6 +24,7 @@
       <label class="btn primary" for="fileInput">Open a file</label>
       <input id="fileInput" type="file" accept=".csv,.tsv,.txt,.xlsx,.xlsm,.docx,.pdf" hidden>
       <button class="btn" id="pasteToggle" type="button">Paste text</button>
+      <button class="btn" id="demoGst" type="button">GST bills example</button>
       <button class="btn" id="demoBtn" type="button">Balance sheet example</button>
       <button class="btn" id="demoSales" type="button">Sales and stock example</button>
     </div>
@@ -54,7 +55,7 @@
   </section>
 
   <section class="card" id="keyCard" aria-labelledby="h-keys">
-    <h2 id="h-keys">3. Pick a section, then a button <span class="small">(53 tools)</span></h2>
+    <h2 id="h-keys">3. Pick a section, then a button <span class="small" id="toolCount"></span></h2>
     <div id="keypad"></div>
     <div class="display" id="display" aria-live="polite">
       <div class="screen" id="screenTitle">Pick a tool above</div>

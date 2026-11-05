@@ -1,7 +1,9 @@
 // app.js -- the screen. All work happens in this browser; nothing is uploaded.
 import { fromRows, toCSV, ops } from "./tableio.js";
 import { importFile, parsePasted } from "./importers.js";
-import { BIZ } from "./biz.js";
+import { BIZ as BIZ0, parseDate } from "./biz.js";
+import { GST_TOOLS } from "./gst.js";
+const BIZ = [...BIZ0, ...GST_TOOLS];
 import { METRICS, runMetric, figures, EXTRA_NAMES } from "./metrics.js";
 import { parseAmount, fmt, detectColumns, ROLES, ROLE_NAMES, guessRoles, buildIdentities, checkSheet, missingFigures, comparePeriods, ratios, whyMismatch } from "./engine.js";
 
@@ -67,6 +69,21 @@ $("pasteGo").addEventListener("click", () => {
   const rows = parsePasted($("pasteText").value);
   if (rows.length < 1) return say("There is nothing to read yet. Paste a table first.", "err");
   pendingTables = [{ name: "Pasted", rows }]; $("tablePick").hidden = true; useTable(0, "", "text");
+});
+$("demoGst").addEventListener("click", () => {
+  const demo = `Bill no,Date,Party,GSTIN,HSN,Item,Qty,Amount,GST %,GST charged
+INV-001,02/10/2026,Sharma Traders,27AAPFU0939F1ZV,1905,Biscuits,50,5000,5,250
+INV-002,03/10/2026,Walk-in,,1006,Rice (branded),20,2400,5,120
+INV-003,05/10/2026,Gupta Stores,09AAACH7409R1ZZ,8517,Mobile phone,2,30000,18,5400
+INV-004,07/10/2026,Walk-in,,3402,Detergent,10,3000,18,450
+INV-004,09/10/2026,Mehta & Co,27AAACR5055K1Z7,1905,Biscuits,100,10000,5,500
+INV-006,12/10/2026,Walk-in,,6109,T-shirts,15,6000,5,300
+INV-007,15/10/2026,Rao Enterprises,27AAPFU0939F1ZX,2106,Namkeen,40,4000,5,200
+INV-008,18/10/2026,Walk-in,,19,Pastry,5,1500,12,180
+INV-009,21/10/2026,Walk-in,,8528,TV 43 inch,1,25000,18,4500`;
+  pendingTables = [{ name: "Example", rows: parsePasted(demo) }]; $("tablePick").hidden = true;
+  useTable(0, "GST example", "text"); section = "gst"; buildKeypad();
+  say("GST example opened. Planted on purpose: one bill with the wrong GST, a repeated bill number, a missing bill number (INV-005), a mistyped GSTIN, a 2-digit HSN and an old 12% rate. Try Check GST on bills, Check GSTIN numbers, Check bill numbers, HSN summary, Sales summary.", "ok");
 });
 $("demoSales").addEventListener("click", () => {
   const demo = `Date,Item,Category,Qty sold,Unit cost,Unit price,Amount,In stock,Reorder level
@@ -176,12 +193,14 @@ function showResults(tool) {
 }
 function rerunTool() { const b = BIZ.find(x => x.id === lastTool); if (lastTool && S.table && !(b && b.kind === "quick")) runTool(lastTool, true); }
 const BASIC = [["check", "Check", "my balance sheet"], ["why", "Why?", "it doesn't match"], ["missing", "Find", "the missing figure"], ["compare", "Compare", "two periods"], ["ratios", "All ratios", "main ones in one go"], ["common", "Common-size", "each line as % of assets"]];
-const SECTIONS = [["bs", "Balance sheet"], ["profit", "Profit and GST"], ["analysis", "Table analysis"], ["stock", "Sales and stock"]];
+const SECTIONS = [["gst", "GST filing"], ["profit", "Profit and price"], ["stock", "Sales and stock"], ["analysis", "Table analysis"], ["bs", "Balance sheet"]];
+const GST_ORDER = ["Check yourself", "Guides", "From your lists", "Bill calculators", "Monthly return (GSTR-3B)", "Composition scheme", "Late filing"];
 const COLORS = ["var(--g-check)", "var(--g-safe)", "var(--g-debt)", "var(--g-profit)"];
-let section = "bs"; try { section = localStorage.getItem("bsc.section") || "bs"; } catch (e) { /* fine */ }
+let section = "gst"; try { section = localStorage.getItem("bsc.section") || "gst"; } catch (e) { /* fine */ }
 function groupsFor(sec) {
   if (sec === "bs") return [["Checks and fixes", COLORS[0], BASIC], ...["Short-term safety", "Debt and ownership", "Needs profit or sales"].map((g, i) => [g === "Needs profit or sales" ? "Needs profit or sales (you type them in)" : g, COLORS[i + 1], METRICS.filter(m => m.group === g).map(m => [m.id, m.name, m.sub])])];
-  const names = [...new Set(BIZ.filter(b => b.section === sec).map(b => b.group))];
+  let names = [...new Set(BIZ.filter(b => b.section === sec).map(b => b.group))];
+  if (sec === "gst") names.sort((x, y) => GST_ORDER.indexOf(x) - GST_ORDER.indexOf(y));
   return names.map((g, i) => [g, COLORS[i % 4], BIZ.filter(b => b.section === sec && b.group === g).map(b => [b.id, b.name, b.sub])]);
 }
 function buildKeypad() {
@@ -193,6 +212,7 @@ $("keypad").addEventListener("click", e => {
   const k = e.target.closest(".key"); if (k) runTool(k.dataset.tool);
 });
 buildKeypad();
+{ const el = document.getElementById("toolCount"); if (el) el.textContent = `(${BIZ.length + METRICS.length + BASIC.length} tools)`; }
 
 function card(cls, title, body = "", actions = "") { return `<div class="res ${cls}"><h3>${title}</h3>${body}${actions ? `<div class="actions">${actions}</div>` : ""}</div>`; }
 const showBtn = cells => `<button class="btn sm" data-show='${JSON.stringify(cells)}'>Show in table</button>`;
@@ -201,7 +221,7 @@ const fixBtn = f => `<button class="btn sm primary" data-fix='${JSON.stringify(f
 function runTool(tool, quiet) {
   showResults(tool); if (!quiet) highlight = new Set();
   const biz = BIZ.find(b => b.id === tool);
-  if (biz) { try { biz.kind === "quick" ? runQuick(biz) : runBizTable(biz); } catch (e) { $("results").innerHTML = card("error", "Something went wrong", `<p>${esc(e.message)}</p>`); } return; }
+  if (biz) { try { biz.kind === "quick" ? runQuick(biz) : biz.kind === "info" ? runInfo(biz) : biz.kind === "help" ? runHelp(biz) : runBizTable(biz); } catch (e) { $("results").innerHTML = card("error", "Something went wrong", `<p>${esc(e.message)}</p>`); } return; }
   if (!S.table) { screen("Open a table first"); $("results").innerHTML = card("info", "This tool needs a table", "<p>Open a file, paste text, or press <b>Try an example</b> above.</p>"); return; }
   const V = view(), out = $("results");
   if (!V.amountCols.length && tool !== "why") { screen("No number columns"); out.innerHTML = card("info", "I could not find a column of numbers", "<p>Under a column's name, choose <b>Numbers</b> for each column that holds amounts.</p>"); return; }
@@ -360,54 +380,74 @@ function renderBlocks(blocks) {
   }).join("");
 }
 
+function runHelp(b) {
+  screen(b.name);
+  $("results").innerHTML = `<div class="res info extras"><label>Search the help<input type="text" id="helpQ" placeholder="for example: credit, invoice, late, e-way" autocomplete="off"></label></div><div id="helpList">` +
+    b.topics.map((t, i) => `<details class="faq" data-hay="${esc((t.q + " " + (t.tags || "") + " " + t.a.join(" ")).toLowerCase())}"><summary>${esc(t.q)}</summary><div class="ans">${t.a.map(p => `<p>${esc(p)}</p>`).join("")}${t.tool ? `<p><button class="btn sm" type="button" data-open="${t.tool}">Open the tool for this</button></p>` : ""}</div></details>`).join("") +
+    `</div><div class="res warn"><p>This help is a plain-language summary of 2026 web articles and the CBIC invoice-rules page, not legal advice. Rules and dates change: confirm on gst.gov.in or with your accountant.</p></div>`;
+}
+function runInfo(b) { screen(b.name); $("results").innerHTML = renderBlocks(b.calc({})); }
 function runQuick(b) {
   screen(b.name);
   const vals = QV[b.id] ||= {};
-  $("results").innerHTML = `<div class="res info extras"><h3>${esc(b.name)}</h3><div class="grid2">${b.fields.map(f => `<div><label>${esc(f.label)}${f.optional ? " (optional)" : ""}<input type="text" inputmode="decimal" data-qf="${f.id}" value="${esc(vals[f.id] || "")}" placeholder="${f.kind === "money" ? "₹" : f.kind === "percent" ? "%" : ""}" autocomplete="off"></label>` +
+  for (const f of b.fields) if (f.kind === "choice" && vals[f.id] === undefined) vals[f.id] = f.def;
+  const input = f => f.kind === "choice"
+    ? `<select data-qf="${f.id}">${f.options.map(([val, lb]) => `<option value="${esc(val)}" ${String(vals[f.id]) === String(val) ? "selected" : ""}>${esc(lb)}</option>`).join("")}</select>`
+    : `<input type="text" inputmode="${f.kind === "date" ? "numeric" : "decimal"}" data-qf="${f.id}" value="${esc(vals[f.id] || "")}" placeholder="${f.kind === "money" ? "₹" : f.kind === "percent" ? "%" : f.kind === "date" ? "DD/MM/YYYY" : ""}" autocomplete="off">`;
+  $("results").innerHTML = `<div class="res info extras"><h3>${esc(b.name)}</h3><div class="grid2">${b.fields.map(f => `<div><label>${esc(f.label)}${f.optional ? " (optional)" : ""}${input(f)}</label>` +
     (f.chips ? `<div class="chips">${f.chips.map(c => `<button type="button" class="chip" data-qchip="${f.id}" data-v="${c}">${c}%</button>`).join("")}</div>` : "") + `</div>`).join("")}</div></div><div id="qout"></div>`;
   quickCalc(b);
 }
 function quickCalc(b) {
   const vals = QV[b.id] || {}, v = {}, bad = [], empty = [];
   for (const f of b.fields) {
-    const s = String(vals[f.id] ?? "").replace(/%\s*$/, ""), p = parseAmount(s);
+    if (f.kind === "choice") { v[f.id] = vals[f.id] ?? f.def; continue; }
+    const raw = String(vals[f.id] ?? "").trim();
+    if (f.kind === "date") { if (!raw) { empty.push(f.label); continue; } const d = parseDate(raw, true); if (!d) bad.push(f.label); else v[f.id] = Date.UTC(d.y, d.m - 1, d.d) / 86400000; continue; }
+    const s = raw.replace(/%\s*$/, ""), p = parseAmount(s);
     if (p.kind === "blank") { if (f.optional) v[f.id] = null; else empty.push(f.label); }
     else if (p.kind === "num") v[f.id] = p.cents / 100; else bad.push(f.label);
   }
   const out = $("qout");
-  if (bad.length) { out.innerHTML = card("warn", "I cannot read a number in", `<p>${bad.map(esc).join(", ")}. Use plain numbers like 1200 or 45.50.</p>`); return; }
+  if (bad.length) { out.innerHTML = card("warn", "I cannot read", `<p>${bad.map(esc).join(", ")}. Use plain numbers like 1200 or 45.50, and dates like 20/10/2026.</p>`); return; }
   if (empty.length) { out.innerHTML = card("info", "Fill in the boxes above", `<p>Still needed: ${empty.map(esc).join(", ")}.</p>`); return; }
-  const r = b.calc(v);
+  const r = b.calc(v, { today: new Date() });
   if (r.missing) { out.innerHTML = card("warn", "Cannot work this out", `<p>${esc(r.missing)}</p>`); return; }
   out.innerHTML = card("good", "Answer", r.rows.map(([k, x, s]) => krow(k, x, s)).join("") + r.notes.map(n => `<p class="small">${esc(n)}</p>`).join(""));
 }
 
 const GUESS = { item: /item|product|name|particular|description|sku|material|account/i, group: /categor|group|type|region|branch|customer|party|department|section|segment/i, amount: /amount|total|sales|revenue|value|net/i,
-  sales: /sales|revenue|price|selling|amount|mrp|rate/i, cost: /cost|purchase|buy/i, qty: /qty|quantity|units|pcs|on hand|stock/i, reorder: /reorder|re-order|minimum|\bmin\b|safety/i, date: /date|month|day|period/i };
+  sales: /sales|revenue|price|selling|amount|mrp|rate/i, cost: /cost|purchase|buy/i, qty: /qty|quantity|units|pcs|on hand|stock/i, reorder: /reorder|re-order|minimum|\bmin\b|safety/i, date: /date|month|day|period/i,
+  gstin: /gstin|gst\s*no|gst\s*number|gst\s*id/i, name: /party|customer|name|supplier|buyer|vendor/i, inv: /invoice|bill|inv\b|voucher|receipt/i, rate: /rate|gst\s*%|tax\s*%|%|slab/i, taxable: /taxable|before|base|price|value|amount/i, gst: /gst|tax/i, hsn: /hsn|sac/i, desc: /desc|item|product|particular|name/i };
 function pickCol(p, V, taken) {
   const n = V.t.header.length, st = PICK[p.id];
-  if (Number.isInteger(st) && st < n) return st;
+  if (Number.isInteger(st) && st < n && (st >= 0 || p.optional)) return st;
   const all = V.t.header.map((_, j) => j), nums = V.amountCols, texts = all.filter(j => !nums.includes(j));
   const pool = p.kind === "num" ? (nums.length ? nums : all) : (texts.length ? texts : all), re = GUESS[p.id];
   const free = pool.filter(j => !taken.has(j));
+  if (p.kind === "text" && re) { const h = texts.find(j => re.test(V.t.header[j]) && !taken.has(j)) ?? all.find(j => re.test(V.t.header[j]) && !taken.has(j)); if (h !== undefined) return h; }
+  if (p.optional) return (re && pool.find(j => re.test(V.t.header[j]) && !taken.has(j))) ?? -1;
   return (re && pool.find(j => re.test(V.t.header[j]) && !taken.has(j))) ?? (p.id === "item" && free.includes(V.labelCol) ? V.labelCol : (free[0] ?? pool[0]));
 }
 function runBizTable(b) {
   screen(b.name);
   if (!S.table) { $("results").innerHTML = card("info", "This tool needs a table", "<p>Open a file, paste text, or press <b>Try an example</b> above. The quick calculators in the <b>Profit and GST</b> section need no file.</p>"); return; }
   const V = view(), pk = {}, taken = new Set(), pm = {};
-  for (const p of b.picks) { pk[p.id] = pickCol(p, V, taken); taken.add(pk[p.id]); }
+  for (const p of b.picks) { pk[p.id] = pickCol(p, V, taken); if (pk[p.id] >= 0) taken.add(pk[p.id]); }
   for (const q of b.params || []) pm[q.id] = PAR[b.id + ":" + q.id] ?? q.def;
   let h = "";
   if (b.picks.length || (b.params || []).length) {
     h += `<div class="res info extras"><h3>Which columns?</h3>${b.picks.length ? '<p class="small">I guessed these from the column names. Change any that are wrong.</p>' : ""}<div class="grid2">` +
-      b.picks.map(p => `<label>${esc(p.label)}<select data-pick="${p.id}">${V.t.header.map((hd, j) => `<option value="${j}" ${pk[p.id] === j ? "selected" : ""}>${j + 1}. ${esc(hd)}</option>`).join("")}</select></label>`).join("") +
+      b.picks.map(p => `<label>${esc(p.label)}<select data-pick="${p.id}">${p.optional ? `<option value="-1" ${pk[p.id] === -1 ? "selected" : ""}>(none)</option>` : ""}${V.t.header.map((hd, j) => `<option value="${j}" ${pk[p.id] === j ? "selected" : ""}>${j + 1}. ${esc(hd)}</option>`).join("")}</select></label>`).join("") +
       (b.params || []).map(q => `<label>${esc(q.label)}<select data-par="${b.id}:${q.id}">${q.options.map(([val, lb]) => `<option value="${esc(val)}" ${String(pm[q.id]) === String(val) ? "selected" : ""}>${esc(lb)}</option>`).join("")}</select></label>`).join("") + `</div></div>`;
   }
-  h += renderBlocks(b.calc({ t: S.table, pk, pm, amountCols: V.amountCols }));
+  const blocks = b.calc({ t: S.table, pk, pm, amountCols: V.amountCols });
+  if (blocks.stash) { const q = (QV.gstpay ||= {}); for (const [k, x] of Object.entries(blocks.stash)) q[k] = x ? String(Math.round(x * 100) / 100) : ""; }
+  h += renderBlocks(blocks);
   $("results").innerHTML = h;
 }
 $("results").addEventListener("input", e => {
+  if (e.target.id === "helpQ") { const q = e.target.value.toLowerCase().split(/\s+/).filter(Boolean); document.querySelectorAll("#helpList .faq").forEach(d => { d.hidden = !q.every(w => d.dataset.hay.includes(w)); if (q.length && !d.hidden) d.open = true; }); return; }
   const el = e.target; if (el.dataset.qf === undefined) return;
   const b = BIZ.find(x => x.id === lastTool); if (!b || b.kind !== "quick") return;
   (QV[b.id] ||= {})[el.dataset.qf] = el.value; quickCalc(b);
@@ -420,6 +460,8 @@ $("results").addEventListener("change", e => {
 
 // buttons inside results
 $("results").addEventListener("click", e => {
+  const op = e.target.closest("[data-open]");
+  if (op) { const b = BIZ.find(x => x.id === op.dataset.open); if (b) { section = b.section; try { localStorage.setItem("bsc.section", section); } catch (x) { /* fine */ } runTool(b.id); buildKeypad(); window.scrollTo({ top: $("keyCard").offsetTop, behavior: "smooth" }); } return; }
   const ch = e.target.closest("[data-qchip]");
   if (ch) { const b = BIZ.find(x => x.id === lastTool); (QV[b.id] ||= {})[ch.dataset.qchip] = ch.dataset.v; const inp = document.querySelector(`input[data-qf="${ch.dataset.qchip}"]`); if (inp) inp.value = ch.dataset.v; quickCalc(b); return; }
   const s = e.target.closest("[data-show]"), f = e.target.closest("[data-fix]");

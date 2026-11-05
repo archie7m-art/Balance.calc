@@ -11,7 +11,6 @@ const pc = x => (Math.abs(x) < 1e-9 ? 0 : x).toFixed(1) + "%";
 const sgn = x => (x > 0 ? "+" : "") + pc(x);
 const qty = c => n2(c / 100);
 
-export const GST_RATES = [5, 12, 18, 28];
 
 // ======================================================================= QUICK TOOLS
 // fields: kind "money" | "percent" | "number"; optional:true means blank is allowed (comes through as null)
@@ -28,14 +27,6 @@ export const QUICK = [
   { id: "pricemarkup", section: "profit", group: "Price and profit", name: "Price for a markup", sub: "cost and markup on cost",
     fields: [{ id: "cost", label: "Cost price", kind: "money" }, { id: "k", label: "Markup wanted", kind: "percent" }],
     calc: v => { const price = v.cost * (1 + v.k / 100), p = price - v.cost; return { rows: [["Selling price", rsx(price), true], ["Profit per unit", rsx(p)], ["Same thing as a margin of", price === 0 ? "–" : pc(p / price * 100)]], notes: [] }; } },
-  { id: "gstadd", section: "profit", group: "GST", name: "Add GST", sub: "price before GST → price with GST",
-    fields: [{ id: "amount", label: "Amount before GST", kind: "money" }, { id: "rate", label: "GST rate", kind: "percent", chips: GST_RATES }],
-    calc: v => { const a = C(v.amount), g = Math.round(a * v.rate / 100), h = Math.floor(g / 2);
-      return { rows: [["Amount before GST", rs(a)], [`GST at ${v.rate}%`, rs(g), true], ["  CGST (half)", rs(h)], ["  SGST (other half)", rs(g - h)], ["Total with GST", rs(a + g), true]], notes: ["For a sale to another state, the whole GST amount is IGST."] }; } },
-  { id: "gstremove", section: "profit", group: "GST", name: "Remove GST", sub: "price with GST → price without",
-    fields: [{ id: "total", label: "Amount including GST", kind: "money" }, { id: "rate", label: "GST rate", kind: "percent", chips: GST_RATES }],
-    calc: v => { const t = C(v.total), base = Math.round(t * 100 / (100 + v.rate)), g = t - base, h = Math.floor(g / 2);
-      return { rows: [["Amount including GST", rs(t)], ["Amount before GST", rs(base), true], [`GST at ${v.rate}%`, rs(g), true], ["  CGST (half)", rs(h)], ["  SGST (other half)", rs(g - h)]], notes: [] }; } },
   { id: "discount", section: "profit", group: "Price and profit", name: "Discount", sub: "final price after one or two discounts",
     fields: [{ id: "price", label: "Original price", kind: "money" }, { id: "d1", label: "Discount", kind: "percent" }, { id: "d2", label: "Second discount (if any)", kind: "percent", optional: true }],
     calc: v => { const a = C(v.price), d2 = v.d2 || 0, fin = Math.round(a * (1 - v.d1 / 100) * (1 - d2 / 100)), saved = a - fin;
@@ -107,16 +98,6 @@ export const TABLE_TOOLS = [
         { type: "table", title: "Most profitable rows", head: ["Item", "Profit", "Margin"], rows: [...rows].sort((a, b) => b.p - a.p).slice(0, 5).map(x => [name(t, x.r, pk.item), rs(x.p), x.s === 0 ? "–" : pc(x.p / x.s * 100)]) },
         ...(skipped ? [{ type: "note", cls: "warn", text: `${skipped} row(s) were left out because one of the two columns had no number.` }] : [])];
     } },
-  { id: "gstcol", section: "profit", group: "On your table", name: "GST on a column", sub: "total GST for a whole list", picks: [{ id: "amount", label: "Amount column", kind: "num" }],
-    params: [{ id: "rate", label: "GST rate", options: GST_RATES.map(r => [r, r + "%"]), def: 18 }, { id: "inc", label: "The amounts are", options: [["ex", "before GST"], ["in", "already with GST"]], def: "ex" }],
-    calc: ({ t, pk, pm }) => {
-      const { ok, skipped } = numbers(t, pk.amount); if (!ok.length) return none("No numbers in that column.");
-      const rate = +pm.rate; let base = 0, gst = 0;
-      for (const { v } of ok) { if (pm.inc === "ex") { const g = Math.round(v * rate / 100); base += v; gst += g; } else { const b = Math.round(v * 100 / (100 + rate)); base += b; gst += v - b; } }
-      const h = Math.floor(gst / 2);
-      return [{ type: "kv", title: `${ok.length} rows at ${rate}% GST (worked out row by row, then added)`, cls: "good", rows: [["Total before GST", rs(base), true], ["Total GST", rs(gst), true], ["  CGST (half)", rs(h)], ["  SGST (other half)", rs(gst - h)], ["Total with GST", rs(base + gst), true]] }, ...skipNote(t, pk.amount, skipped)];
-    } },
-
   // ---------------------------------------------------------------- table analysis
   { id: "totals", section: "analysis", group: "Understand a table", name: "Totals and averages", sub: "for every number column", picks: [],
     calc: ({ t, amountCols }) => {
@@ -227,3 +208,5 @@ export const TABLE_TOOLS = [
 ];
 
 export const BIZ = [...QUICK.map(q => ({ ...q, kind: "quick" })), ...TABLE_TOOLS.map(q => ({ ...q, kind: "table" }))];
+
+export { pc, C, rsx, cellVal, text, name, norm, numbers, skipNote, none };

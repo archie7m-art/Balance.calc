@@ -118,3 +118,10 @@ footer{max-width:1000px;margin:16px auto 28px;color:var(--muted);font-size:.82re
 .chip{appearance:none;border:2px solid var(--brand);background:#fff;color:var(--brand);border-radius:99px;min-height:36px;padding:2px 14px;font:inherit;font-weight:800;cursor:pointer}
 .extras select{width:100%;min-height:44px}
 .extras .small{margin:0 0 8px}
+
+.faq{background:#fff;border:2px solid var(--line);border-radius:10px;padding:0 12px}
+.faq+.faq{margin-top:8px}
+.faq summary{cursor:pointer;font-weight:800;padding:12px 0;min-height:44px}
+.faq[open] summary{color:var(--brand)}
+.faq .ans p{margin:6px 0 10px;color:var(--ink)}
+#helpList{display:grid;gap:0}

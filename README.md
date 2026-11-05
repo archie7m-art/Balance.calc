@@ -1,6 +1,6 @@
 # Business Calculator
 
-A small website you can install on your phone like an app (a PWA). 53 tools in four sections: Balance sheet, Profit and GST, Table analysis, Sales and stock. Amounts are in rupees (₹). Open a balance sheet from CSV, Excel (.xlsx), Word (.docx), a PDF with real text, or pasted text. Fix any cell by hand, delete rows or columns, then press a button:
+A small website you can install on your phone like an app (a PWA). 71 tools in five sections: GST filing (for Indian shops), Profit and price, Sales and stock, Table analysis, Balance sheet. Amounts are in rupees (₹). Open a balance sheet from CSV, Excel (.xlsx), Word (.docx), a PDF with real text, or pasted text. Fix any cell by hand, delete rows or columns, then press a button:
 
 - **Check**: do the totals match their lines, and does Assets = Liabilities + Equity?
 - **Why?**: which single mistake (swapped digits, slipped decimal, counted twice, wrong sign...) explains a gap.

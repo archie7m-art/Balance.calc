@@ -1,6 +1,6 @@
 // Offline support: keep a copy of the app on the device. Bump VERSION whenever any file changes.
-const VERSION = "bsc-v5";
-const FILES = ["./", "index.html", "styles.css", "app.js", "engine.js", "tableio.js", "importers.js", "readers.js", "xml.js", "metrics.js", "biz.js",
+const VERSION = "bsc-v7";
+const FILES = ["./", "index.html", "styles.css", "app.js", "engine.js", "tableio.js", "importers.js", "readers.js", "xml.js", "metrics.js", "biz.js", "gst.js",
   "manifest.webmanifest", "icon-192.png", "icon-512.png", "icon-maskable-512.png",
   "vendor/jszip.min.js", "vendor/pdf.min.mjs", "vendor/pdf.worker.min.mjs"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
